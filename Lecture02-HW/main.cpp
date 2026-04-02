@@ -147,7 +147,7 @@ void UpdateVerticies(Vertex vertices[], int length, Direction dir)
 
     }
 }
-
+// WinMain은 Main함수 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     // 1. 윈도우 등록 및 생성
     WNDCLASSEXW wcex = { sizeof(WNDCLASSEX) };
