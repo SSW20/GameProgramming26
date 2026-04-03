@@ -65,6 +65,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ShowWindow(hWnd, nCmdShow);
 
     // 2. DX11 디바이스 및 스왑 체인 초기화
+    // DXGI_SWAP_CHAIN_DESC 스왑체인 설정 구조체
     DXGI_SWAP_CHAIN_DESC sd = {};
     sd.BufferCount = 1;
     sd.BufferDesc.Width = 800; sd.BufferDesc.Height = 600;
@@ -74,7 +75,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     sd.SampleDesc.Count = 1;
     sd.Windowed = TRUE;
 
-    // GPU와 통신할 통로(Device)와 화면(SwapChain)을 생성함.
+    // GPU와 통신할 통로(Device)와 화면(SwapChain)을 생성함., Device / Context / SwapChain 생성
     D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0,
         D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, nullptr, &g_pImmediateContext);
 
@@ -85,10 +86,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     pBackBuffer->Release(); // 뷰를 생성했으므로 원본 텍스트는 바로 해제 (중요!)
 
     // 3. 셰이더 컴파일 및 생성
+    // Blob : 컴파일된 셰이더 코드 (바이너리 덩어리), 이후 Blob을 통해 실제 셰이더를 가져옴
+     // 픽셀 셰이더와 버텍스 셰이더를 컴파일 후 저장
     ID3DBlob* vsBlob, * psBlob;
     D3DCompile(shaderSource, strlen(shaderSource), nullptr, nullptr, nullptr, "VS", "vs_4_0", 0, 0, &vsBlob, nullptr);
     D3DCompile(shaderSource, strlen(shaderSource), nullptr, nullptr, nullptr, "PS", "ps_4_0", 0, 0, &psBlob, nullptr);
-
     ID3D11VertexShader* vShader;
     ID3D11PixelShader* pShader;
     g_pd3dDevice->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &vShader);
@@ -110,6 +112,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         { -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f },
     };
     ID3D11Buffer* pVBuffer;
+    // GPU 버퍼 설정
     D3D11_BUFFER_DESC bd = { sizeof(vertices), D3D11_USAGE_DEFAULT, D3D11_BIND_VERTEX_BUFFER, 0, 0, 0 };
     D3D11_SUBRESOURCE_DATA initData = { vertices, 0, 0 };
     g_pd3dDevice->CreateBuffer(&bd, &initData, &pVBuffer);
@@ -131,10 +134,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, clearColor);
 
             // 렌더링 파이프라인 상태 설정
+            
+            // Output Merger 단계에 렌더 타겟을 연결하는 코드
             g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
+
+            //{ TopLeftX, TopLeftY, Width, Height, MinDepth, MaxDepth } View Port (출력 영역)설정
             D3D11_VIEWPORT vp = { 0, 0, 800, 600, 0.0f, 1.0f };
             g_pImmediateContext->RSSetViewports(1, &vp);
 
+            // VertexBuffer 연결 
             g_pImmediateContext->IASetInputLayout(pInputLayout);
             UINT stride = sizeof(Vertex), offset = 0;
             g_pImmediateContext->IASetVertexBuffers(0, 1, &pVBuffer, &stride, &offset);
@@ -142,7 +150,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             // Primitive Topology 설정: 삼각형 리스트로 연결하라!
             g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+            // Vertex Shader 연결
             g_pImmediateContext->VSSetShader(vShader, nullptr, 0);
+
+            // Pixel Shader 연결
             g_pImmediateContext->PSSetShader(pShader, nullptr, 0);
 
             // 최종 그리기

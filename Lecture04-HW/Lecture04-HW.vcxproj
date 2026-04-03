@@ -24,6 +24,7 @@
     <ProjectGuid>{41dc0fd3-2521-4379-a8e9-737a4b466f52}</ProjectGuid>
     <RootNamespace>Lecture04HW</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>Lecture04-HW_temp</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
