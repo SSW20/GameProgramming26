@@ -46,17 +46,13 @@
 
 
 
-struct Vertex {
+struct Vertex 
+{
     float x, y, z;
     float r, g, b, a;
 };
-typedef struct GameContext {
-    float LeftOffsetX = 0.f;
-    float LeftOffsetY = 0.f;
-
-    float RightOffsetX = 0.f;
-    float RightOffsetY = 0.f;
-
+typedef struct GameContext
+{
     ID3D11Device* pd3dDevice = NULL;          // 리소스 생성자 (공장)  GPU랑 연결되어있는 통로, 
     ID3D11DeviceContext* pImmediateContext = NULL;   // 그리기 명령 수행 (일꾼) , 통로에 담아서 보낼 Command List
     IDXGISwapChain* pSwapChain = NULL;          // 화면 전환 (더블 버퍼링)  , 모니터의 메모리와 GPU의 메모리를 스왑핑
@@ -64,7 +60,7 @@ typedef struct GameContext {
     ID3D11PixelShader* pPixelShader = NULL;         // 픽셀 셰이더
     ID3D11VertexShader* pVertexShader = NULL;       // 정점 셰이더
     ID3D11InputLayout* pVertexLayout = NULL;               // Vertex 구조 설명서
-    ID3D11Buffer* pBuffer = NULL;         // VertexBuffer
+    bool bFullScreen = false;
 };
 
 GameContext* g_gamecontext = NULL;
@@ -85,12 +81,15 @@ float4 PS(PS_INPUT input) : SV_Target {
     return input.col; // 정점에서 계산된 색상을 픽셀에 그대로 적용
 }
 )";
-
+void ToggleWindow()
+{
+    g_gamecontext->pSwapChain->SetFullscreenState(g_gamecontext->bFullScreen, nullptr);
+    g_gamecontext->bFullScreen = !g_gamecontext->bFullScreen;
+}
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message)    //윈도우의 이벤트는 메시지에 담김
     {
- 
     default:
         // 우리가 관심 없는 메시지(창 크기 조절, 포커스 변경 등)는 OS가 기본값으로 처리함.
         return DefWindowProc(hWnd, message, wParam, lParam);
@@ -175,7 +174,6 @@ void ClearGameContext()
     if (g_gamecontext->pPixelShader) g_gamecontext->pPixelShader->Release();
     if (g_gamecontext->pVertexShader) g_gamecontext->pVertexShader->Release();
     if (g_gamecontext->pVertexLayout) g_gamecontext->pVertexLayout->Release();
-    if (g_gamecontext->pBuffer) g_gamecontext->pBuffer->Release();
 }
 
 // [1단계:컴포넌트 기저 클래스]
@@ -201,11 +199,18 @@ class GameObject {
 public:
     std::string name;
     std::vector<Component*> components;
-
+    float x = 0.f, y = 0.f;
     GameObject(std::string n)
     {
         name = n;
     }
+    GameObject(std::string n, float x, float y)
+    {
+        name = n;
+        this->x = x;
+        this->y = y;
+    }
+
 
     // 객체가 죽을 때 담고 있던 컴포넌트들도 메모리에서 해제함
     ~GameObject() {
@@ -229,12 +234,12 @@ public:
 // 기능 1: 플레이어 조종 및 이동
 class PlayerControl : public Component {
 public:
-    float x, y, speed;
+    float  speed;
     bool moveUp, moveDown, moveLeft, moveRight;
-
+    bool bLeft = false;
     void Start() override
     {
-        x = 0.0f; y = 0.0f; speed = 0.1f;
+        speed = 1.0f;
         moveUp = moveDown = moveLeft = moveRight = false;
         printf("[%s] PlayerControl 기능 시작!\n", pOwner->name.c_str());
     }
@@ -242,7 +247,7 @@ public:
     // [입력 단계] 키 상태만 체크함
     void Input() override
     {
-        if (pOwner->name == "LeftPlayer")
+        if (bLeft)
         {
             moveUp = (GetAsyncKeyState('W') & 0x8000);
             moveDown = (GetAsyncKeyState('S') & 0x8000);
@@ -261,39 +266,10 @@ public:
     // [업데이트 단계] 체크된 키 상태로 좌표만 계산함
     void Update(float dt) override
     {
-        if (moveUp)    y -= speed * dt;
-        if (moveDown)  y += speed * dt;
-        if (moveLeft)  x -= speed * dt;
-        if (moveRight) x += speed * dt;
-        
-        // 4. 정점 버퍼 생성 (삼각형 데이터)
-        Vertex vertices[] = {
-            // 왼쪽
-        {0.0f + x,  0.577f + y, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f},
-        {0.5f + x, -0.289f + y, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f},
-        {-0.5f + x, -0.289f + y, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f} };
-        if (g_gamecontext->pBuffer) g_gamecontext->pBuffer->Release();
-
-        D3D11_BUFFER_DESC bd = { sizeof(vertices), D3D11_USAGE_DEFAULT, D3D11_BIND_VERTEX_BUFFER, 0, 0, 0 };
-        D3D11_SUBRESOURCE_DATA initData = { vertices, 0, 0 };
-        g_gamecontext->pd3dDevice->CreateBuffer(&bd, &initData, &g_gamecontext->pBuffer);
-    }
-
-    // [렌더링 단계] 계산된 좌표를 화면에 그림
-    void Render() override
-    {
-        // 실제 엔진이라면 여기서 DirectX Draw를 부름
-        g_gamecontext->pImmediateContext->IASetInputLayout(g_gamecontext->pVertexLayout);
-        UINT stride = sizeof(Vertex), offset = 0;
-        g_gamecontext->pImmediateContext->IASetVertexBuffers(0, 1, &g_gamecontext->pBuffer, &stride, &offset);
-
-        // Primitive Topology 설정: 삼각형 리스트로 연결하라!
-        g_gamecontext->pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        g_gamecontext->pImmediateContext->VSSetShader(g_gamecontext->pVertexShader, nullptr, 0);
-        g_gamecontext->pImmediateContext->PSSetShader(g_gamecontext->pPixelShader, nullptr, 0);
-
-        // 최종 그리기 , (정점 개수, 1 : 모니터 주사율에 맞춰서 렌더링 / 0 : 최고성능)
-        g_gamecontext->pImmediateContext->Draw(3, 0);
+        if (moveUp)    pOwner->y += speed * dt;
+        if (moveDown)  pOwner->y -= speed * dt;
+        if (moveLeft)  pOwner->x -= speed * dt;
+        if (moveRight) pOwner->x += speed * dt;
     }
 };
 
@@ -329,6 +305,7 @@ public:
    
         // esc 누르면 종료
         if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) isRunning = false;
+        if (GetAsyncKeyState('F') & 0x8000) ToggleWindow();
 
         // B. 입력 단계 (Input Phase)
         for (int i = 0; i < (int)gameWorld.size(); i++)
@@ -386,7 +363,7 @@ public:
         }
 
         // 화면 교체 (프론트 버퍼와 백 버퍼 스왑)
-        g_gamecontext->pSwapChain->Present(0, 0);
+        g_gamecontext->pSwapChain->Present(1, 0);
 
     }
     void Run()
@@ -424,6 +401,57 @@ public:
 
 };
 
+class ComponentRenderer : public Component
+{
+private:
+    ID3D11Buffer* pVertexBuffer = nullptr;
+    float r = 0, g = 0, b = 0, a = 0;
+public:
+    ComponentRenderer() {};
+    ComponentRenderer(float r, float g, float b, float a)
+    {
+        this->r = r;
+        this->g = g;
+        this->b = b;
+        this->a = a;
+    }
+    void Start() override {};
+    void Update(float dt) override
+    {
+        Vertex vertices[] = 
+        {
+        {0.0f + pOwner->x,  0.577f + pOwner->y, 0.0f,  r, g, b, a},
+        {0.5f + pOwner->x, -0.289f + pOwner->y, 0.0f,  r, g, b, a},
+        {-0.5f + pOwner->x, -0.289f + pOwner->y, 0.0f,  r, g, b, a}
+        };
+
+        if (pVertexBuffer) pVertexBuffer->Release();
+        D3D11_BUFFER_DESC bd = { sizeof(vertices), D3D11_USAGE_DEFAULT, D3D11_BIND_VERTEX_BUFFER, 0, 0, 0 };
+        D3D11_SUBRESOURCE_DATA initData = { vertices, 0, 0 };
+        g_gamecontext->pd3dDevice->CreateBuffer(&bd, &initData, &pVertexBuffer);
+    }
+    // [렌더링 단계] 계산된 좌표를 화면에 그림
+    void Render() override
+    {
+        // 실제 엔진이라면 여기서 DirectX Draw를 부름
+        g_gamecontext->pImmediateContext->IASetInputLayout(g_gamecontext->pVertexLayout);
+        UINT stride = sizeof(Vertex), offset = 0;
+        g_gamecontext->pImmediateContext->IASetVertexBuffers(0, 1, &pVertexBuffer, &stride, &offset);
+
+        // Primitive Topology 설정: 삼각형 리스트로 연결하라!
+        g_gamecontext->pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        g_gamecontext->pImmediateContext->VSSetShader(g_gamecontext->pVertexShader, nullptr, 0);
+        g_gamecontext->pImmediateContext->PSSetShader(g_gamecontext->pPixelShader, nullptr, 0);
+
+        // 최종 그리기 , (정점 개수)
+        g_gamecontext->pImmediateContext->Draw(3, 0);
+    }
+    ~ComponentRenderer()
+    {
+        if (pVertexBuffer) pVertexBuffer->Release();
+    }
+};
+
 
 
 // WinMain은 Main함수 
@@ -447,12 +475,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     gLoop.gameWorld.push_back(sysInfo);
 
     // 플레이어 객체 조립
-    GameObject* leftPlayer = new GameObject("LeftPlayer");
-    GameObject* rightPlayer = new GameObject("RightPlayer");
+    GameObject* leftPlayer = new GameObject("Player2", -0.2, 0);
+    GameObject* rightPlayer = new GameObject("Player1", 0.2, 0);
     PlayerControl* lControl = new PlayerControl();
     PlayerControl* rControl = new PlayerControl();
+    lControl->bLeft = true;
+    ComponentRenderer* lCR = new ComponentRenderer();
+    ComponentRenderer* rCR = new ComponentRenderer(1.0f, 1.0f, 1.0f, 1.0f);
     leftPlayer->AddComponent(lControl);
+    leftPlayer->AddComponent(lCR);
     rightPlayer->AddComponent(rControl);
+    rightPlayer->AddComponent(rCR);
     gLoop.gameWorld.push_back(leftPlayer);
     gLoop.gameWorld.push_back(rightPlayer);
 
